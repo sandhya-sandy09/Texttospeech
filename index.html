@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text to Speech</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        h1 {
+            margin-bottom: 20px;
+            color: #007BFF;
+        }
+        textarea {
+            width: 100%;
+            height: 120px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+            resize: none;
+        }
+        input[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #007BFF;
+            color: white;
+            font-size: 16px;
+        }
+        input[type="submit"]:hover {
+            background-color: #0056b3;
+        }
+        .progress {
+            width: 100%;
+            background-color: #ccc;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            height: 20px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background-color: #007BFF;
+            border-radius: 4px;
+            text-align: center;
+            color: white;
+            transition: width 0.3s ease;
+        }
+        .audio-controls {
+            display: none;
+            margin-top: 10px;
+        }
+        .audio-controls button {
+            padding: 8px 20px;
+            margin: 5px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .audio-controls button:hover {
+            background-color: #0056b3;
+        }
+        .audio-controls button svg {
+            width: 24px;
+            height: 24px;
+            vertical-align: middle;
+        }
+        .audio-controls-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Text to Speech</h1>
+        <form id="textToSpeechForm">
+            <textarea name="text" id="textInput" placeholder="Enter text here"></textarea><br>
+            <input type="submit" value="Convert">
+        </form>
+        <div class="progress">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+        <div class="audio-controls">
+            <div class="audio-controls-wrapper">
+                <button onclick="rewindAudio()">&#9664; 10s</button>
+                <audio id="audioPlayer" controls></audio>
+                <button onclick="forwardAudio()">10s &#9654;</button>
+            </div>
+            <button onclick="downloadAudio()">Download</button>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('textToSpeechForm');
+        const progressBar = document.getElementById('progressBar');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const audioControls = document.querySelector('.audio-controls');
+
+        form.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const formData = new FormData(form);
+
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+
+            const response = await fetch('/convert', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            if (response.ok) {
+                const contentLength = parseInt(response.headers.get('Content-Length'), 10);
+                const reader = response.body.getReader();
+                let receivedLength = 0; // length of received content so far
+                let chunks = []; // array of received binary chunks (comprises the body)
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) {
+                        break;
+                    }
+                    chunks.push(value);
+                    receivedLength += value.length;
+                    progressBar.style.width = `${(receivedLength / contentLength * 100).toFixed(2)}%`;
+                    progressBar.textContent = `${(receivedLength / contentLength * 100).toFixed(2)}%`;
+                }
+                // concatenate chunks into single Uint8Array
+                let chunksAll = new Uint8Array(receivedLength); // (4.1)
+                let position = 0;
+                for(let chunk of chunks) {
+                    chunksAll.set(chunk, position); // (4.2)
+                    position += chunk.length;
+                }
+                const blob = new Blob([chunksAll], {type: 'audio/mpeg'});
+                const audioUrl = URL.createObjectURL(blob);
+                audioPlayer.src = audioUrl;
+                audioControls.style.display = 'block';
+            } else {
+                console.error('Error converting text to speech');
+            }
+        });
+
+        function downloadAudio() {
+            const url = audioPlayer.src;
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'output.mp3';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        function rewindAudio() {
+            audioPlayer.currentTime -= 10;
+        }
+
+        function forwardAudio() {
+            audioPlayer.currentTime += 10;
+        }
+    </script>
+</body>
+</html>
